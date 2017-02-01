@@ -1,0 +1,67 @@
+---
+title: "Update 2 stat479"
+author: "Marshall Bennett"
+date: "February 1, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+#New code
+dest= rep("", 52)
+for(i in 1:52) dest[i]=paste("https://www.fhwa.dot.gov/bridge/nbi/2016/delimited/", states[i,2],"16.txt", sep = "") 
+x16 = ldply(dest, fread, colClasses = classes) 
+save(x16, file = "bridgesdata.RData")
+keep = c("STATE_CODE_001",  "FEATURES_DESC_006A", "STRUCTURE_NUMBER_008" , "COUNTY_CODE_003", "LAT_016", "LONG_017", "TOLL_020" ,"YEAR_BUILT_027", "ADT_029","YEAR_ADT_030"
+         , "DECK_COND_058" , "SUPERSTRUCTURE_COND_059", "SUBSTRUCTURE_COND_060"  , "CHANNEL_COND_061","CULVERT_COND_062", "DATE_OF_INSPECT_090",  "OPERATING_RATING_064")
+M=x16
+# x = M[,match(keep, colnames(M))]
+M = as.tbl(M)
+x = select(M, one_of(keep))
+library(ggplot2)
+x = mutate(x, fips = STATE_CODE_001*1000+COUNTY_CODE_003)
+#It's interesting to see that there are quite a few counties
+#with very high numbers of bridges
+
+hist(x$fips)
+#The condition variables will be the excellent way to rate
+#the bridges, but first the N values should be replaced with
+#10, for the highest value
+x$DECK_COND_058[which(x$DECK_COND_058 == "N")]= 10
+x$SUPERSTRUCTURE_COND_059[which(x$SUPERSTRUCTURE_COND_059 == "N")]= 10
+x$SUBSTRUCTURE_COND_060 [which(x$SUBSTRUCTURE_COND_060 == "N")]= 10
+x$CHANNEL_COND_061[which(x$CHANNEL_COND_061 == "N")]= 10
+x$CULVERT_COND_062[which(x$CULVERT_COND_062 == "N")]= 10
+x = mutate(x, cond = as.numeric(x$DECK_COND_058)+as.numeric(x$SUPERSTRUCTURE_COND_059)+ as.numeric(x$SUBSTRUCTURE_COND_060)+ as.numeric(x$CHANNEL_COND_061)+as.numeric(x$CULVERT_COND_062))
+
+#Stole Karl's function to suit my needs
+rateIt = function(cond){
+  # gives a good to fail rating for cond.
+  rate = rep("new", length(cond))
+  rate[cond<40] = "Like New"
+  rate[cond <30]= "Average"
+  rate[cond <20]= "Poor"
+  rate[cond < 10] = "Failure"
+  return(rate)
+}
+x$rate = rateIt(x$cond)
+old = filter(x, x$YEAR_BUILT_027<1940)
+war = filter(x, x$YEAR_BUILT_027>1940 & x$YEAR_BUILT_027<1946)
+new = filter(x, x$YEAR_BUILT_027>1946)
+hist(old$cond)
+hist(war$cond)
+hist(new$cond)
+#This plot is very time consuming, but it accurately plots
+#the ages and conditions of the bridges, with the rating 
+#used as the color of the different dots.
+ggplot(x, aes(YEAR_BUILT_027, cond))+geom_point(aes(colour = rate))
+#Itis clear from the subsequent graph that the majority of
+#the bridges are doing well, in the mid to upper 40s.
+ggplot(x) + geom_bar(mapping = aes(x=cond))
+
+
+
